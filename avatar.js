@@ -2,13 +2,35 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-window.onload = () => loadModel();
+window.onload = () => {
+  loadModel()
+  loadContactAvatar()
+  };
+
+
+function loadContactAvatar() {
+    const loader = new GLTFLoader();
+    loader.load('public/avatar.glb',
+      (gltf) => {
+        setupScene(gltf, 'contact');
+        document.getElementById('contact-avatar-loading').style.display = 'none';
+      },
+      (xhr) => {
+        const percentCompletion = Math.round((xhr.loaded / xhr.total) * 100);
+        document.getElementById('contact-avatar-loading').innerText = `LOADING... ${percentCompletion}%`
+        console.log(`Loading contact avatar... ${percentCompletion}%`);
+      },
+      (error) => {
+        console.log(error);
+      }
+    );
+  }
 
 function loadModel() {
   const loader = new GLTFLoader();
   loader.load('public/avatar.glb',
     (gltf) => {
-      setupScene(gltf);
+      setupScene(gltf, 'home');
       document.getElementById('avatar-loading').style.display = 'none';
     }, 
     (xhr) => {
@@ -22,14 +44,20 @@ function loadModel() {
   );
 }
 
-function setupScene(gltf) {
+
+
+
+
+function setupScene(gltf, section) {
+    let containerID = section == 'home' ? 'avatar-container': 'contact-avatar-container';
+    console.log(containerID);
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true, 
       alpha: true 
     });
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     
-    const container = document.getElementById('avatar-container');
+    const container = document.getElementById(containerID);
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     
@@ -87,18 +115,54 @@ function setupScene(gltf) {
     groundMesh.castShadow = false;
     groundMesh.receiveShadow = true;
     groundMesh.position.y -= 0.05;
-    scene.add(groundMesh);
+
+    if (section == 'home')
+      scene.add(groundMesh);
 
     // Load animations
     const mixer = new THREE.AnimationMixer(avatar);
     const clips = gltf.animations;
     const waveClip = THREE.AnimationClip.findByName(clips, 'waving');
     const stumbleClip = THREE.AnimationClip.findByName(clips, 'cartwhell');
+    const callingClip = THREE.AnimationClip.findByName(clips, 'calling');
+    const typingClip = THREE.AnimationClip.findByName(clips, 'typing');
     const waveAction = mixer.clipAction(waveClip);
     const stumbleAction = mixer.clipAction(stumbleClip);
+    const callingAction = mixer.clipAction(callingClip);
+    const typingAction = mixer.clipAction(typingClip);
 
-    let isStumbling = false;
-    const raycaster = new THREE.Raycaster();
+
+    handleAvatarClick(section, container,camera, avatar, waveAction, stumbleAction);
+    changeAnimationWhenUserInput(section, callingAction, typingAction);
+    
+
+    window.addEventListener('resize', () => {
+      camera.aspect = container.clientWidth / container.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+      requestAnimationFrame(animate);
+      mixer.update(clock.getDelta());
+      renderer.render(scene, camera);
+    }
+    changeAnimationWhenUserInput()
+    animate();
+
+    if (section == 'home')
+      waveAction.play();
+    else 
+      callingAction.play();
+}
+
+function handleAvatarClick(section, container,camera, avatar, waveAction, stumbleAction){
+
+  if (section != 'home') return
+  let isStumbling = false;
+
+  const raycaster = new THREE.Raycaster();
     container.addEventListener('mousedown', (ev) => {
       const coords = {
         x: (ev.offsetX / container.clientWidth) * 2 - 1,
@@ -124,20 +188,30 @@ function setupScene(gltf) {
         }, 3300)
       }
     });
-
-    window.addEventListener('resize', () => {
-      camera.aspect = container.clientWidth / container.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(container.clientWidth, container.clientHeight);
-    });
-
-    const clock = new THREE.Clock();
-    function animate() {
-      requestAnimationFrame(animate);
-      mixer.update(clock.getDelta());
-      renderer.render(scene, camera);
-    }
-
-    animate();
-    waveAction.play();
 }
+
+
+function changeAnimationWhenUserInput(section, defaultAction, newAction){
+  if (section != 'contact') return;
+  
+  const formInputs = document.querySelectorAll('#contact-form input, #contact-form textarea');
+  let isAction = false;
+
+  formInputs.forEach(input => {
+    input.addEventListener('input', function (event) {
+      if(isAction) return;
+      isAction = true;
+      newAction.reset();
+      newAction.play();
+      defaultAction.crossFadeTo(newAction, 0.3);
+  
+      setTimeout(() => {
+        defaultAction.reset();
+        defaultAction.play();
+        newAction.crossFadeTo(defaultAction, 1);
+        setTimeout(() => isAction = false, 1000);
+      }, 20000)
+    });
+  });
+}
+
