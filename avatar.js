@@ -121,7 +121,7 @@ function setupScene(gltf) {
           waveAction.play();
           stumbleAction.crossFadeTo(waveAction, 1);
           setTimeout(() => isStumbling = false, 1000);
-        }, 4000)
+        }, 3300)
       }
     });
 
